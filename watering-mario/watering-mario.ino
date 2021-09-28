@@ -19,7 +19,7 @@
 #include "thingProperties.h"
 
 #include <Arduino_MKRIoTCarrier.h>
-MKRIoTCarrier opla;
+#include <Arduino_OplaUI.h>
 
 const int moistPin = A5;
 const float waterAmount = 2;  // liters
@@ -27,13 +27,20 @@ const float waterSpeed = 0.045; // liters/sec
 const float waterTime = waterAmount / waterSpeed;  // seconds
 unsigned long startedWatering;
 
+MKRIoTCarrier opla;
+CycleWidgetsApp app;
+Gauge2_Widget moistureWidget;
+Bool_Widget wateringToggleWidget;
+
 void setup() {
   Serial.begin(9600);
   delay(1500);
 
-  initProperties();
+  // Make sure the pump is not running
+  stopWatering();
 
   // Connect to Arduino IoT Cloud
+  initProperties();
   ArduinoCloud.begin(ArduinoIoTPreferredConnection);
   setDebugMessageLevel(4);
   ArduinoCloud.printDebugInfo();
@@ -42,31 +49,42 @@ void setup() {
   CARRIER_CASE = true;
   opla.begin();
 
-  // Make sure the pump is not running
-  stopWatering();
+  moistureWidget.attachValue(moisture);
+  moistureWidget.setTitle("MOISTURE");
+  moistureWidget.setRange(0, 100);
+  moistureWidget.setSuffix(" %");
+  moistureWidget.setReadOnly(true);
+
+  wateringToggleWidget.attachValue(watering);
+  wateringToggleWidget.setTitle("PUMP");
+
+  app.begin(opla);
+  app.addWidget(moistureWidget);
+  app.addWidget(wateringToggleWidget);
 }
 
 void loop() {
   ArduinoCloud.update();
+  app.loop();
   
   // Read the sensor and convert its value to a percentage 
   // (0% = dry; 100% = wet)
   raw_moisture = analogRead(moistPin);
   moisture = map(raw_moisture, 780, 1023, 100, 0);
+
+  // Set the LED color according to the moisture percentage
+  if (moisture > 40) {
+    opla.leds.setPixelColor(1, 50, 0 , 0);  // green
+  } else if (moisture > 10) {
+    opla.leds.setPixelColor(1, 50, 50 , 0); // yellow
+  } else {
+    opla.leds.setPixelColor(1, 0, 50 , 0);  // red
+  }
+  opla.leds.show();
   
   // Stop watering after the configured duration
   if (watering && (millis() - startedWatering) >= waterTime*1000) {
     stopWatering();
-  }
-  
-  // Handle button presses to start/stop watering
-  opla.Buttons.update();
-  if (opla.Buttons.onTouchDown(TOUCH0)) {
-    if (watering) {
-      stopWatering();
-    } else {
-      startWatering();
-    }
   }
   
   delay(200);
@@ -88,16 +106,12 @@ void startWatering () {
   log_message = "Start watering";
   startedWatering = millis();
   opla.Relay2.open();
-  opla.leds.setPixelColor(0, 0 , 50 , 0);
-  opla.leds.show();
 }
 
 void stopWatering () {
   watering = false;
   log_message = "Stop watering";
   opla.Relay2.close();
-  opla.leds.setPixelColor(0, 50 , 0 , 0);
-  opla.leds.show();
 }
 
 
