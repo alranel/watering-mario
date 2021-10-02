@@ -16,6 +16,7 @@
   These functions are generated with the Thing and added at the end of this sketch.
 */
 
+#include "arduino_secrets.h"
 #include "thingProperties.h"
 
 #include <Arduino_MKRIoTCarrier.h>
@@ -44,20 +45,24 @@ void setup() {
   ArduinoCloud.begin(ArduinoIoTPreferredConnection);
   setDebugMessageLevel(4);
   ArduinoCloud.printDebugInfo();
-  
-  // Initialize Oplà
-  CARRIER_CASE = true;
-  opla.begin();
 
+  // Configure widgets
   moistureWidget.attachValue(moisture);
   moistureWidget.setTitle("MOISTURE");
   moistureWidget.setRange(0, 100);
+  moistureWidget.setDigits(0);
   moistureWidget.setSuffix(" %");
   moistureWidget.setReadOnly(true);
 
   wateringToggleWidget.attachValue(watering);
   wateringToggleWidget.setTitle("PUMP");
+  wateringToggleWidget.onValueChange(onWateringChange);
+  
+  // Initialize Oplà
+  CARRIER_CASE = true;
+  opla.begin();
 
+  // Initialize the widget application
   app.begin(opla);
   app.addWidget(moistureWidget);
   app.addWidget(wateringToggleWidget);
@@ -102,15 +107,15 @@ void onWateringChange() {
 }
 
 void startWatering () {
+  if (!watering) log_message = "Start watering";
   watering = true;
-  log_message = "Start watering";
   startedWatering = millis();
   opla.Relay2.open();
 }
 
 void stopWatering () {
+  if (watering) log_message = "Stop watering";
   watering = false;
-  log_message = "Stop watering";
   opla.Relay2.close();
 }
 
